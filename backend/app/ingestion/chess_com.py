@@ -81,14 +81,26 @@ def _determine_color(game: dict, username: str) -> str:
 
 
 def _determine_result(game: dict, username: str) -> str:
-    """Determine the game result from the perspective of the given username."""
+    """Determine the game result from the perspective of the given username.
+
+    Reads the result field from chess.com's per-player-side data and maps
+    it to a canonical 'win' / 'loss' / 'draw' value.
+    """
     white = game.get("white", {})
     black = game.get("black", {})
     color = _determine_color(game, username)
     if color == "white":
         result_str = white.get("result", "")
-    else:
+    elif color == "black":
         result_str = black.get("result", "")
+    else:
+        logger.warning(
+            "Could not determine color for %s in game vs %s/%s; result will be unknown",
+            username,
+            white.get("username", "?"),
+            black.get("username", "?"),
+        )
+        result_str = ""
     result_map = {
         "win": "win",
         "checkmated": "loss",
@@ -111,8 +123,16 @@ def _determine_opponent(game: dict, username: str) -> tuple[str, int | None]:
     black = game.get("black", {})
     if white.get("username", "").lower() == username.lower():
         opponent = black
-    else:
+    elif black.get("username", "").lower() == username.lower():
         opponent = white
+    else:
+        logger.warning(
+            "Could not determine opponent for %s (white=%s, black=%s)",
+            username,
+            white.get("username", "?"),
+            black.get("username", "?"),
+        )
+        return "unknown", None
     return opponent.get("username", "unknown"), opponent.get("rating")
 
 
