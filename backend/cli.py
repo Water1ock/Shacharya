@@ -25,6 +25,7 @@ from backend.app.models.schema import (
 )
 from backend.app.ingestion.chess_com import sync_month
 from backend.app.analysis.engine import analyze_game
+from backend.app.profile.engine import generate_profile
 
 logging.basicConfig(
     level=logging.INFO,
@@ -342,6 +343,16 @@ def cmd_sync_all(
                 result["analyzed"],
                 result["moves_stored"],
                 result["errors"],
+            )
+
+            # Regenerate Weakness Profile after analysis
+            logger.info("Generating Weakness Profile...")
+            profile = generate_profile(player.id)
+            logger.info(
+                "Profile generated: %d games, accuracy=%.1f%%, blunder_rate=%.1f%%",
+                profile.get("total_games_analyzed", 0),
+                profile.get("overall", {}).get("accuracy", 0),
+                profile.get("overall", {}).get("blunder_rate", 0),
             )
         else:
             logger.info("Skipping analysis (--skip-analysis flag set)")

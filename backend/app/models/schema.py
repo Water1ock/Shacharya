@@ -11,6 +11,7 @@ from sqlalchemy import (
     ForeignKey,
     create_engine,
     UniqueConstraint,
+    JSON,
 )
 from sqlalchemy.orm import DeclarativeBase, relationship, Session
 from backend.app.config import DATABASE_URL
@@ -106,6 +107,23 @@ class Move(Base):
     __table_args__ = (
         UniqueConstraint("game_id", "ply", name="uq_game_ply"),
     )
+
+
+class WeaknessProfile(Base):
+    """Cached, regeneratable snapshot of aggregated stats per player.
+
+    Per AGENT_CONTEXT.md section 6: not computed live on every request.
+    Regenerated on sync completion, stored as a JSON blob keyed by player.
+    """
+
+    __tablename__ = "weakness_profiles"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    player_id = Column(
+        Integer, ForeignKey("players.id"), nullable=False, unique=True, index=True
+    )
+    profile_json = Column(JSON, nullable=False)
+    generated_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
 
 # Engine and session factory
