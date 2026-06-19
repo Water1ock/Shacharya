@@ -14,6 +14,7 @@ from backend.app.models.schema import (
     Move,
     WeaknessProfile,
 )
+from backend.app.profile.engine import generate_profile
 
 app = FastAPI(title="Shacharya", version="0.1.0")
 
@@ -66,6 +67,30 @@ class MoveDetail(BaseModel):
 @app.get("/api/health")
 def health() -> dict:
     return {"status": "ok"}
+
+
+@app.post("/api/profile/{username}/regenerate")
+def regenerate_profile(username: str) -> dict:
+    """Regenerate the Weakness Profile for a player on demand."""
+    session = get_session()
+    try:
+        player = (
+            session.query(Player).filter_by(chess_com_username=username).first()
+        )
+        if not player:
+            raise HTTPException(404, f"Player '{username}' not found")
+
+        session.close()
+        profile = generate_profile(player.id)
+        return {
+            "username": username,
+            "player_id": player.id,
+            "profile": profile,
+            "message": "Profile regenerated successfully",
+        }
+    except Exception as e:
+        session.close()
+        raise HTTPException(500, str(e))
 
 
 @app.get("/api/profile/{username}")
