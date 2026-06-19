@@ -1,0 +1,28 @@
+# Environment
+.env
+
+# Python
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+
+# Node
+node_modules/
+frontend/dist/
+frontend/build/
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# IDE
+.vscode/
+.idea/
+
+# This file is for coding agents only — keep local
+AGENT_CONTEXT.md

@@ -1,0 +1,11 @@
+{
+  "name": "shacharya-frontend",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Shacharya AI Chess Coach - Frontend",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  }
+}
