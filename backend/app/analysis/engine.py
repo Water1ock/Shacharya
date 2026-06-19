@@ -1,5 +1,6 @@
 """Stockfish analysis pipeline — move-by-move evaluation via UCI."""
 
+import io
 import logging
 import re
 from typing import Optional
@@ -62,27 +63,30 @@ def _extract_clock_seconds(comment: str) -> Optional[int]:
 def _extract_eval_score(
     info: chess.engine.InfoDict,
     player_color: chess.Color,
+    board_turn: chess.Color,
 ) -> tuple[int | None, int | None]:
     """Extract centipawn and mate-in values from an engine info dict.
 
     Returns (centipawns, mate_in) where exactly one is non-None.
     centipawns is from the perspective of player_color.
     mate_in > 0 means player_color mates in N; negative means player_color is mated in N.
+
+    Uses board_turn to correctly convert score.relative (which is from
+    side-to-move's perspective) to player_color's perspective.
     """
-    score = info.get("score")
-    if score is None:
+    pov_score = info.get("score")
+    if pov_score is None:
         return None, None
 
-    relative_score = score.relative
-    if relative_score.is_mate():
-        # python-chess: positive = side to move mates. Convert to player_color perspective.
-        mate_in = relative_score.mate()
-        if info.get("turn") != player_color:
+    relative = pov_score.relative  # Cp or Mate from side-to-move's perspective
+    if relative.is_mate():
+        mate_in = relative.mate()
+        if board_turn != player_color:
             mate_in = -mate_in
         return None, mate_in
     else:
-        cp = relative_score.score()
-        if cp is not None and info.get("turn") != player_color:
+        cp = relative.score()
+        if cp is not None and board_turn != player_color:
             cp = -cp
         return cp, None
 
@@ -101,11 +105,9 @@ def _detect_game_phase(board: chess.Board, ply: int) -> str:
     if ply <= OPENING_MAX_PLIES:
         return "opening"
 
-    # Count minor pieces still on their starting squares
-    # "Developed" = a minor piece has moved from its start square
-    # For simplicity, use the ply-based opener for now
-    # More sophisticated: check if bishops haven't moved from c1/f1 or c8/f8
-    # and knights haven't moved from b1/g1 or b8/g8
+    # Phase 0 uses a ply-only heuristic for opening detection.
+    # Future: also check minor piece development (bishops from c1/f1/c8/f8,
+    # knights from b1/g1/b8/g8) as mentioned in config.
 
     # Endgame check: total non-pawn material
     non_pawn_material = 0
@@ -173,7 +175,7 @@ def analyze_game(
         A list of dicts, each representing one move's analysis ready for DB insertion.
     """
     # Parse PGN
-    pgn_io = chess.pgn.StringIO(pgn_text)
+    pgn_io = io.StringIO(pgn_text)
     game = chess.pgn.read_game(pgn_io)
     if game is None:
         logger.warning("Could not parse PGN for game %d", game_id)
@@ -198,7 +200,7 @@ def analyze_game(
                 board,
                 chess.engine.Limit(depth=STOCKFISH_DEPTH),
             )
-            cp_before, mate_before = _extract_eval_score(info_before, color)
+            cp_before, mate_before = _extract_eval_score(info_before, color, board.turn)
 
             # Get engine's best move
             best_move = info_before.get("pv")
@@ -217,20 +219,17 @@ def analyze_game(
                 board,
                 chess.engine.Limit(depth=STOCKFISH_DEPTH),
             )
-            cp_after, mate_after = _extract_eval_score(info_after, color)
+            cp_after, mate_after = _extract_eval_score(info_after, color, board.turn)
 
             # --- Compute eval swing ---
+            # cp_before and cp_after are already from the player's perspective
+            # (converted by _extract_eval_score), so swing = cp_before - cp_after
+            # works for both colors: positive swing = player's position got worse
             swing = None
             if cp_before is not None and cp_after is not None:
-                # For White player: eval_before - eval_after (positive = worse position)
-                # For Black player: eval_after - eval_before (positive = worse position)
-                if player_color == "white":
-                    swing = cp_before - cp_after
-                else:
-                    swing = cp_after - cp_before
-                # Clamp swing at 0 (no negative swings — if position improved, swing = 0)
+                swing = cp_before - cp_after
                 if swing < 0:
-                    swing = 0
+                    swing = 0  # clamp: position improved, no negative swings
 
             # --- Classification ---
             classification = _classify_move(uci, best_move_uci, swing)
